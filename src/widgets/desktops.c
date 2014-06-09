@@ -1,8 +1,9 @@
 #include "widgets.h"
 #include "desktops.h"
+#include <assert.h>
 
 static int
-widget_update (struct widget *widget, xcb_ewmh_connection_t *ewmh, int screen_nbr) {
+widget_update (struct widget *widget, xcb_ewmh_connection_t *ewmh, int screen_nbr, uint32_t *max_desktops) {
 	unsigned short i;
 	uint32_t desktop_curr, desktop_len, client_desktop;
 	char desktop_name[COPY_PROP_BUFSIZ];
@@ -22,9 +23,9 @@ widget_update (struct widget *widget, xcb_ewmh_connection_t *ewmh, int screen_nb
 	/* get desktop count */
 	int desktop_len_success = xcb_ewmh_get_number_of_desktops_reply(ewmh, xcb_ewmh_get_number_of_desktops_unchecked(ewmh, screen_nbr), &desktop_len, NULL);
 	if (!desktop_len_success) {
-		LOG_DEBUG("ewmh: could not get desktop count");
-
-		return 2;
+		if (desktop_curr > *max_desktops)
+			*max_desktops = desktop_curr;
+		desktop_len = *max_desktops;
 	}
 
 	desktops = calloc(desktop_len, sizeof(struct desktop));
@@ -34,6 +35,8 @@ widget_update (struct widget *widget, xcb_ewmh_connection_t *ewmh, int screen_nb
 		LOG_DEBUG("ewmh: could not get desktop names");
 	}
 
+	assert(desktop_curr > 0);
+	--desktop_curr;
 	for (i = 0; i < desktop_len; i++) {
 		desktops[i].is_selected = i == desktop_curr;
 		desktops[i].is_urgent = false;
@@ -113,6 +116,7 @@ widget_main (struct widget *widget) {
 	unsigned short i;
 	int xcb_fd;
 	int screen_nbr = 0;
+	uint32_t max_desktops = 0;
 	xcb_connection_t *conn = xcb_connect(NULL, NULL);
 	xcb_ewmh_connection_t *ewmh = malloc(sizeof(xcb_ewmh_connection_t));
 	struct epoll_event xcb_event;
@@ -149,7 +153,7 @@ widget_main (struct widget *widget) {
 		return 0;
 	}
 
-	widget_update(widget, ewmh, screen_nbr);
+	widget_update(widget, ewmh, screen_nbr, &max_desktops);
 	while (true) {
 		while ((nfds = epoll_wait(efd, events, MAX_EVENTS, -1)) > 0) {
 			for (i = 0; i < nfds; i++) {
@@ -164,13 +168,13 @@ widget_main (struct widget *widget) {
 				case XCB_PROPERTY_NOTIFY:
 					pne = (xcb_property_notify_event_t*)evt;
 					if (pne->atom == ewmh->_NET_DESKTOP_NAMES) {
-						widget_update(widget, ewmh, screen_nbr);
+						widget_update(widget, ewmh, screen_nbr, &max_desktops);
 					}
 					else if (pne->atom == ewmh->_NET_NUMBER_OF_DESKTOPS) {
-						widget_update(widget, ewmh, screen_nbr);
+						widget_update(widget, ewmh, screen_nbr, &max_desktops);
 					}
 					else if (pne->atom == ewmh->_NET_CURRENT_DESKTOP) {
-						widget_update(widget, ewmh, screen_nbr);
+						widget_update(widget, ewmh, screen_nbr, &max_desktops);
 					}
 				default:
 					break;
