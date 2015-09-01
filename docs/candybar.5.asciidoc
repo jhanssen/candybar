@@ -61,6 +61,16 @@ default: "%H:%M"
 
 default: 10
 
+desktops
+^^^^^^^^^^
+
+Display desktops.
+
+'show_empty'::
+    Display empty desktops. Set to false to hide empty/unselected desktops.
+
+default: true
+
 email_imap
 ^^^^^^^^^^
 
@@ -79,6 +89,14 @@ default: none
 
 'password'::
     IMAP server password.
+
+default: none
+
+'password_command'::
+    Command to execute to retrieve the IMAP server password. Useful for GPG-encrypted
+    password files or third-party password stores like *pass*(1).
+
+    Example: "/usr/bin/pass path/to/my-imap-account"
 
 default: none
 
@@ -213,7 +231,7 @@ further details.
 Authors
 -------
 
-Kim Silkebækken <kim@silkebaekken.net>
+Kim Silkebækken <kim@silkebaekken.no>
 
 See https://github.com/Lokaltog/candybar/graphs/contributors for a list of all
 contributors.

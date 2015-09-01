@@ -3,8 +3,8 @@
 #include <assert.h>
 
 static int
-widget_update (struct widget *widget, xcb_ewmh_connection_t *ewmh, int screen_nbr, uint32_t *max_desktops) {
-	unsigned short i;
+widget_update (struct widget *widget, xcb_ewmh_connection_t *ewmh, int screen_nbr, struct widget_config config) {
+        unsigned short i;
 	uint32_t desktop_curr, desktop_len, client_desktop;
 	char desktop_name[COPY_PROP_BUFSIZ];
 	xcb_ewmh_get_utf8_strings_reply_t desktop_names;
@@ -78,7 +78,13 @@ widget_update (struct widget *widget, xcb_ewmh_connection_t *ewmh, int screen_nb
 	json_t *json_desktops_array = json_array();
 	json_object_set_new(json_data_object, "desktops", json_desktops_array);
 
+	uint32_t desktop_idx = 0;
 	for (i = 0; i < desktop_len; i++) {
+		/* Hide desktop if not config.show_empty and empty/unselected */
+		if (!(config.show_empty) && !desktops[i].is_selected && (desktops[i].clients_len == 0)) {
+			continue;
+		}
+
 		json_t *json_desktop = json_object();
 		json_object_set_new(json_desktop, "name", json_string(desktops[i].name));
 		json_object_set_new(json_desktop, "clients_len", json_integer(desktops[i].clients_len));
@@ -86,8 +92,9 @@ widget_update (struct widget *widget, xcb_ewmh_connection_t *ewmh, int screen_nb
 		json_array_append_new(json_desktops_array, json_desktop);
 
 		if (desktops[i].is_selected) {
-			json_object_set_new(json_data_object, "current_desktop", json_integer(i));
+			json_object_set_new(json_data_object, "current_desktop", json_integer(desktop_idx));
 		}
+		desktop_idx++;
 	}
 
 	char *json_str = strdup(json_dumps(json_data_object, 0));
@@ -121,6 +128,9 @@ widget_main (struct widget *widget) {
 	xcb_ewmh_connection_t *ewmh = malloc(sizeof(xcb_ewmh_connection_t));
 	struct epoll_event xcb_event;
 
+	struct widget_config config = widget_config_defaults;
+	widget_init_config_boolean(widget->config, "show_empty", config.show_empty);
+
 	widget_epoll_init(widget);
 
 	if (xcb_connection_has_error(conn)) {
@@ -153,8 +163,8 @@ widget_main (struct widget *widget) {
 		return 0;
 	}
 
-	widget_update(widget, ewmh, screen_nbr, &max_desktops);
-	while (true) {
+        widget_update(widget, ewmh, screen_nbr, config);
+        while (true) {
 		while ((nfds = epoll_wait(efd, events, MAX_EVENTS, -1)) > 0) {
 			for (i = 0; i < nfds; i++) {
 				if (events[i].data.fd == widget->bar->efd) {
@@ -168,14 +178,14 @@ widget_main (struct widget *widget) {
 				case XCB_PROPERTY_NOTIFY:
 					pne = (xcb_property_notify_event_t*)evt;
 					if (pne->atom == ewmh->_NET_DESKTOP_NAMES) {
-						widget_update(widget, ewmh, screen_nbr, &max_desktops);
-					}
+                                                widget_update(widget, ewmh, screen_nbr, config);
+                                        }
 					else if (pne->atom == ewmh->_NET_NUMBER_OF_DESKTOPS) {
-						widget_update(widget, ewmh, screen_nbr, &max_desktops);
-					}
+                                                widget_update(widget, ewmh, screen_nbr, config);
+                                        }
 					else if (pne->atom == ewmh->_NET_CURRENT_DESKTOP) {
-						widget_update(widget, ewmh, screen_nbr, &max_desktops);
-					}
+                                                widget_update(widget, ewmh, screen_nbr, config);
+                                        }
 				default:
 					break;
 				}
